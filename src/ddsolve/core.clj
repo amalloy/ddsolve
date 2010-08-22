@@ -1,17 +1,15 @@
 (ns ddsolve.core
-  (:require (swank core)
-	    (clojure.contrib seq-utils)))
+  (:use (swank core)))
 
 (declare trick-winner update-score next-player get-cards make-suit ring)
 
-(defstruct card :suit :rank :owner)
-(defstruct score :ns :ew)
-(defstruct state
-  :trumps
-  :trick ; cards already played to the current trick
-  :to-play ; who plays next
-  :score)
-(defstruct position :hands :state)
+(defrecord Card [suit rank owner])
+(defrecord Score [ns ew])
+(defrecord State [trumps
+		  trick ; cards already played to the current trick
+		  to-play ; who plays next
+		  score])
+(defrecord Position [hands state])
 
 (defn play-to-trick [{cards :trick,
 		      score :score,
@@ -22,7 +20,7 @@
     (let [winning-card (trick-winner trumps ; find who won the trick
 				     (conj cards card)) ; add the fourth card
 	  leader (:owner winning-card)]
-      (struct state
+      (State.
 	      trumps
 	      [] ; no cards played to the next trick yet
 	      (:owner winning-card)
@@ -33,6 +31,7 @@
 
 (def side {:e :ew, :w :ew
 	   :n :ns, :s :ns})
+
 (defn update-score [score winner]
   (let [winning-side (side winner)
 	tricks (score winning-side)]
@@ -55,10 +54,10 @@
 
 (defn play [{st :state, hands :hands}
 	    {owner :owner :as card}]
-  (struct-map position
-    :hands (assoc hands owner
-	     (remove-card (hands owner) card))
-    :state (play-to-trick st card)))
+  (Position.
+   (play-to-trick st card)
+   (assoc hands owner
+	  (remove-card (hands owner) card))))
     
 (defn legal-follows [led cards]
   (if-let [follow (filter #(= (:suit %) led) cards)]
@@ -79,22 +78,22 @@
 (defn get-cards [hand]
   (apply concat (vals hand)))
 
- (defn ring [& elts]
+(defn ring [& elts]
    (zipmap elts (drop 1 (cycle elts))))
 
- (def next-player (ring :w :n :e :s))
+(def next-player (ring :w :n :e :s))
 (def opponent (ring :ew :ns))
 
 
- (defn rank-to-int [rank]
+(defn rank-to-int [rank]
    (if (number? rank) rank
        ({:t 10 :j 11 :q 12 :k 13 :a 14} rank)))
 
- (defn rank> [& ranks]
+(defn rank> [& ranks]
    "Compares ranks of cards. Just treats them as numbers now, but using it
     allows for future changes, eg using 'k instead of 13"
    (apply > (map rank-to-int ranks)))
-
+;XXX zipmap?
 (defn make-hand [owner suits]
   (apply hash-map (interleave (map first suits)
 			      (map #(make-suit
@@ -106,8 +105,9 @@
 (defn make-suit
   ([suit ranks] (make-suit [suit nil ranks]))
   ([suit owner ranks]
-     (map (partial struct-map card :suit suit :owner owner :rank)
-		(sort rank> ranks))))
+     (let [template (Card. suit nil owner)]
+       (map (partial assoc template :rank)
+	    (sort rank> ranks)))))
 
  (defn equiv-suit [{:keys [west north east south]} played]
  "Given a list of cards 2-14 that have been played already,
@@ -115,7 +115,7 @@
   card in the suit and any touching cards in the same player's hand (equals),
   2 is the next-strongest group, etc., up to possibly 13."
  )
- (defn winner [trumps
+(defn winner [trumps
 	       led
 	       {s1 :suit, rank1 :rank :as card1}
 	       {s2 :suit, rank2 :rank :as card2}]
@@ -128,10 +128,10 @@
       (= s1 led) card1
       :else card2)))
 
- (defn trick-winner [trumps [{led :suit} :as cards]]
+(defn trick-winner [trumps [{led :suit} :as cards]]
    (reduce (partial winner trumps led) cards))
 
- (defn possible-next-states [position]
+(defn possible-next-states [position]
    (map (partial play position) (legal-moves position)))
 
 (defmacro parse-suit [s]
@@ -152,31 +152,42 @@
 		(zipmap ~suit-labels
 			(vec '~processed)))))
 
-(def random-strategy #(clojure.contrib.seq-utils/rand-elt %2))
-(def highest-strategy #(first %2))
-(def lowest-strategy #(last %2))
+(defn ignore-params
+  ([f n-keep]
+     (ignore-params f n-keep 0))
+  ([f n-keep n-drop]
+     (fn [& args]
+       (apply f (->> args (drop n-drop) (take n-keep))))))
 
+(def random-strategy (ignore-params rand-nth 1))
+(def highest-strategy (ignore-params first 1))
+(def lowest-strategy (ignore-params last 1))
+
+(comment don't think this is needed anymore
 (defn make-legal-move [posn]
   (play posn (first (legal-moves posn))))
+)
 
 (defn contract [trumps declarer]
-  (struct state trumps [] (next-player declarer) (struct score 0 0)))
+  (State. trumps [] (next-player declarer) (Score. 0 0)))
 
 (def st (contract :nt :s))
 (def layout {:w (short-hand :w j754 4 kt964 t82)
 	     :n (short-hand :n q8 ak53 aqj kqj7)
 	     :e (short-hand :e k qt987 852 9543)
 	     :s (short-hand :s at9632 j62 73 a6)})
-(def posn (struct position layout st))
+(def posn (Position. layout st))
 (def end-posn (play-deal-strategically posn highest-strategy 44))
 (def empty-posn (play-deal-strategically end-posn highest-strategy 8))
 
 (defn play-with-strategy [posn strat]
   (let [legal-choices (legal-moves posn)
-	choice (strat posn legal-choices)
-	card (if (map? choice) ; if strategy returns more than one move, take the first
-	       choice
-	       (first choice))]
+	choice (strat legal-choices posn)
+	card (cond
+	      (instance? Card choice) choice
+	      (map? choice) (:card choice)
+	      (seq? choice) (first choice)
+	      :else (break))] ; can't make sense of this miss
     (when (some #{card} legal-choices) ; only take legal moves
       (play posn card))))
 
@@ -187,7 +198,7 @@
 
 					; What the consequences of playing a particular card will be. :score will be nil if the solver has not analyzed the position yet.
 
-(defstruct conseq :posn :card :score)
+(defrecord Conseq [posn card score])
 
 (defn apply-keys [f keys]
   "This must exist as a builtin but I don't know where. Return a map of {k (f k)}."
@@ -201,10 +212,10 @@ with each. Returns a map of plays => conseq objects (without scores)."
   (try 
     (if posn
       (apply-keys 
-       #(struct conseq (play posn %) %)
+       #(Conseq. (play posn %) % nil)
        (legal-moves posn))
-      (swank.core/break))
-    (catch Exception _ (swank.core/break))))
+      (break))
+    (catch Exception _ (break))))
 
 (defn minimax
   "Determine the maximum number of tricks available to the current player.
@@ -216,17 +227,17 @@ Return a conseq object."
      :as posn}]
   (when (nil? posn) (swank.core/break))
   (let [c (conseqs posn)]
-;    (swank.core/break)
+;    (break)
     (if (seq c)
       (let [scores (apply-keys
 		    (map key c) ; the card
 		    (map minimax (map :posn (vals c)))) ; the score obtained after playing it
 	    best-result (apply max-key #(p (:score (val %))) scores)]
-	(println best-result)
-	(struct conseq
+;	(println best-result)
+	(Conseq.
 		(:posn (val best-result))
 		(key best-result)
 		(:score (val best-result))))
-      {nil (struct-map conseq :score sc)})))
+      {nil (Conseq. nil nil sc)})))
 
 
