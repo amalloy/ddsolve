@@ -108,7 +108,7 @@
 		 (key %)
 		 owner
 		 (val %))
-	       suits))))
+	       suits)))
 
  (defn equiv-suit [{:keys [west north east south]} played]
  "Given a list of cards 2-14 that have been played already,
@@ -180,6 +180,7 @@
 		deal)
        num-plays))
 
+;; "default" positions to analyze, for use in testing
 (def st (contract :nt :s))
 (def layout {:w (short-hand :w j754 4 kt964 t82)
 	     :n (short-hand :n q8 ak53 aqj kqj7)
@@ -189,7 +190,7 @@
 (def end-posn (play-deal-strategically posn highest-strategy 44))
 (def empty-posn (play-deal-strategically end-posn highest-strategy 8))
 
-					; What the consequences of playing a particular card will be. :score will be nil if the solver has not analyzed the position yet.
+;; What the consequences of playing a particular card will be. :score will be nil if the solver has not analyzed the position yet.
 (defrecord Conseq [posn card score])
 
 (defn apply-keys [f keys]
