@@ -102,14 +102,13 @@
        (map (partial assoc template :rank)
 	    (sort rank> ranks)))))
 
-;XXX zipmap?
 (defn make-hand [owner suits]
-  (apply hash-map (interleave (map first suits)
-			      (map #(make-suit
-				     (key %)
-				     owner
-				     (val %))
-				   suits))))
+  (zipmap (map first suits)
+	  (map #(make-suit
+		 (key %)
+		 owner
+		 (val %))
+	       suits))))
 
  (defn equiv-suit [{:keys [west north east south]} played]
  "Given a list of cards 2-14 that have been played already,
