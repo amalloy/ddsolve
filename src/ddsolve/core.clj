@@ -20,6 +20,7 @@
 (def side {:e :ew, :w :ew
 	   :n :ns, :s :ns})
 
+
 (defn winner [trumps
 	      led
 	      {s1 :suit, r1 :rank :as card1}
@@ -223,14 +224,12 @@ Return a conseq object."
 ;    (break)
     (if (seq c)
       (let [scores (apply-keys
-		    (map key c) ; the card
+
 		    (map minimax (map :posn (vals c)))) ; the score obtained after playing it
 	    best-result (apply max-key #(p (:score (val %))) scores)]
-;	(println best-result)
 	(Conseq.
 		(:posn (val best-result))
 		(key best-result)
 		(:score (val best-result))))
       {nil (Conseq. nil nil sc)})))
-
 
