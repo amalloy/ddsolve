@@ -2,8 +2,6 @@
   (:use (swank core))
   (:refer clojure.pprint :only [pprint]))
 
-;(declare trick-winner update-score next-player get-cards make-suit ring)
-
 (defrecord Card [suit rank owner])
 (defrecord Score [ns ew])
 (defrecord State [trumps
