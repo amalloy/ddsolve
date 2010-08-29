@@ -132,7 +132,7 @@
 
 (defmacro parse-suit [s]
   `(let [cards# (seq (str ~s))]
-     (if (= cards# '(-))
+     (if (= cards# [\-])
        []
        (vec
 	(for [c# (map str cards#)]
@@ -179,16 +179,16 @@
        num-plays))
 
 ;; "default" positions to analyze, for use in testing
-(def st (contract :nt :s))
-(def layout {:w (short-hand :w j754 4 kt964 t82)
-	     :n (short-hand :n q8 ak53 aqj kqj7)
-	     :e (short-hand :e k qt987 852 9543)
-	     :s (short-hand :s at9632 j62 73 a6)})
-(def posn (Position. layout st))
-(def end-posn (play-deal-strategically posn highest-strategy 44))
-(def empty-posn (play-deal-strategically end-posn highest-strategy 8))
+(def st (State. :nt [] :w {:ew 0, :ns 0}))
 
-;; What the consequences of playing a particular card will be. :score will be nil if the solver has not analyzed the position yet.
+(def layout {:w (short-hand :w aj7 - - -)
+	     :n (short-hand :n - akq - -)
+	     :e (short-hand :e - - akq -)
+	     :s (short-hand :s kqt - - -)})
+(def posn (Position. layout st))
+;(def end-posn (play-deal-strategically posn lowest-strategy 44))
+;(def empty-posn (play-deal-strategically end-posn highest-strategy 8))
+
 (defrecord Conseq [posn card score])
 
 (defn apply-keys [f keys]
@@ -196,39 +196,67 @@
   (zipmap keys
 	  (map f keys)))
 
-(defn conseqs
-  "Determine all legal moves from this position, and the next-state associated
+(comment
+  (defn conseqs
+    "Determine all legal moves from this position, and the next-state associated
 with each. Returns a map of plays => conseq objects (without scores)."
-  [posn]
-  (try 
-    (if posn
-      (apply-keys 
-       #(Conseq. (play posn %) % nil)
-       (legal-moves posn))
-      (break))
-    (catch Exception _ (break))))
+    [posn]
+    (try 
+      (if posn
+	(apply-keys 
+	 #(Conseq. (play posn %) % nil)
+	 (legal-moves posn))
+	(break))
+      (catch Exception _ (break)))))
 
-(defn minimax
-  "Determine the maximum number of tricks available to the current player.
+(comment
+  (defn minimax
+    "Determine the maximum number of tricks available to the current player.
 Return a conseq object."
-  [{{p :player,
-     sc :score
-     :as st} :state
-     hands :hands
-     :as posn}]
-  (when (nil? posn) (swank.core/break))
-  (let [c (conseqs posn)]
-;    (break)
-    (if (seq c)
-      (let [scores (apply-keys
-		    (map key c) ; the card
-		    (map minimax (map :posn (vals c)))) ; the score obtained after playing it
-	    best-result (apply max-key #(p (:score (val %))) scores)]
-;	(println best-result)
-	(Conseq.
-		(:posn (val best-result))
-		(key best-result)
-		(:score (val best-result))))
-      {nil (Conseq. nil nil sc)})))
+    [{{p :player,
+       sc :score
+       :as st} :state
+       hands :hands
+       :as posn}]
+    (when (nil? posn) (swank.core/break))
+    (let [c (conseqs posn)]
+					;    (break)
+      (if (seq c)
+	(let [scores (apply-keys
+		      (map key c)	; the card
+		      (map minimax (map :posn (vals c)))) ; the score obtained after playing it
+	      best-result (apply max-key #(p (:score (val %))) scores)]
+					;	(println best-result)
+	  (Conseq.
+	   (:posn (val best-result))
+	   (key best-result)
+	   (:score (val best-result))))
+	{nil (Conseq. nil nil sc)}))))
 
+
+
+(defn best-for-player [p]
+  (partial max-key (comp (side p)
+			 :score
+			 :state
+			 :posn)))
+
+(defn conseq-of [posn card]
+  (let [new-posn (play posn card)]
+    (Conseq. new-posn
+	     card
+	     (:score (:state new-posn)))))
+
+(defn minimax [consq]
+  (let [posn (:posn consq)
+	p (-> posn (:state) (:to-play))]
+    (if-let [plays (seq (legal-moves posn))]
+      (let [best-conseq (reduce (best-for-player p)
+				(map (comp minimax (partial conseq-of posn))
+				     plays))]
+;	(assoc best-conseq
+					;	  :posn nil))
+	best-conseq)
+      (assoc consq
+	:score (:score (:state posn))))))
 
