@@ -181,6 +181,7 @@
 ;; "default" positions to analyze, for use in testing
 (def st (State. :nt [] :w {:ew 0, :ns 0}))
 
+;; A simple W-vs-S endplay position, with whoever's on lead being endplayed
 (def layout {:w (short-hand :w aj7 - - -)
 	     :n (short-hand :n - akq - -)
 	     :e (short-hand :e - - akq -)
@@ -189,53 +190,15 @@
 ;(def end-posn (play-deal-strategically posn lowest-strategy 44))
 ;(def empty-posn (play-deal-strategically end-posn highest-strategy 8))
 
-(defrecord Conseq [posn card score])
+(defrecord Conseq [posn ; the resultant position
+		   card ; the card played to get here
+		   score ; the score resulting (if known)
+		   ])
 
-(defn apply-keys [f keys]
-  "This must exist as a builtin but I don't know where. Return a map of {k (f k)}."
-  (zipmap keys
-	  (map f keys)))
-
-(comment
-  (defn conseqs
-    "Determine all legal moves from this position, and the next-state associated
-with each. Returns a map of plays => conseq objects (without scores)."
-    [posn]
-    (try 
-      (if posn
-	(apply-keys 
-	 #(Conseq. (play posn %) % nil)
-	 (legal-moves posn))
-	(break))
-      (catch Exception _ (break)))))
-
-(comment
-  (defn minimax
-    "Determine the maximum number of tricks available to the current player.
-Return a conseq object."
-    [{{p :player,
-       sc :score
-       :as st} :state
-       hands :hands
-       :as posn}]
-    (when (nil? posn) (swank.core/break))
-    (let [c (conseqs posn)]
-					;    (break)
-      (if (seq c)
-	(let [scores (apply-keys
-		      (map key c)	; the card
-		      (map minimax (map :posn (vals c)))) ; the score obtained after playing it
-	      best-result (apply max-key #(p (:score (val %))) scores)]
-					;	(println best-result)
-	  (Conseq.
-	   (:posn (val best-result))
-	   (key best-result)
-	   (:score (val best-result))))
-	{nil (Conseq. nil nil sc)}))))
-
-
-
-(defn best-for-player [p]
+(defn best-for-player
+  "Return a function which chooses, from among a set of positions, the one with the
+best score for the player supplied"
+  [p]
   (partial max-key (comp (side p)
 			 :score
 			 :state
@@ -247,12 +210,15 @@ Return a conseq object."
 	     card
 	     (:score (:state new-posn)))))
 
-(defn minimax [consq]
+(defn minimax
+  "determine the optimal play recursively"
+  [consq]
   (let [posn (:posn consq)
 	p (-> posn (:state) (:to-play))]
     (if-let [plays (seq (legal-moves posn))]
       (let [best-conseq (reduce (best-for-player p)
-				(map (comp minimax (partial conseq-of posn))
+				(map (comp minimax
+					   (partial conseq-of posn))
 				     plays))]
 ;	(assoc best-conseq
 					;	  :posn nil))
@@ -260,3 +226,5 @@ Return a conseq object."
       (assoc consq
 	:score (:score (:state posn))))))
 
+(defn simplify [all-cards hands]
+  )
