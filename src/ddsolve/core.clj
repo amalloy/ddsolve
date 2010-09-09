@@ -183,11 +183,13 @@
 (def st (State. :nt [] :w {:ew 0, :ns 0}))
 
 ;; A simple W-vs-S endplay position, with whoever's on lead being endplayed
-(def layout {:w (short-hand :w aj7 - - -)
+(def layout {:w (short-hand :w aqt - - -)
 	     :n (short-hand :n - akq - -)
 	     :e (short-hand :e - - akq -)
-	     :s (short-hand :s kqt - - -)})
+	     :s (short-hand :s kj9 - - -)})
 (def posn (Position. layout st))
+(def c (Conseq. posn nil nil))
+(def bad-c (Conseq. (play posn (Card. :spade :a :w)) nil nil))
 ;(def end-posn (play-deal-strategically posn lowest-strategy 44))
 ;(def empty-posn (play-deal-strategically end-posn highest-strategy 8))
 
@@ -229,3 +231,7 @@ best score for the player supplied"
 
 (defn simplify [all-cards hands]
   )
+
+
+
+(defn tricks-after [{hands :hands, st :state :as posn}])
