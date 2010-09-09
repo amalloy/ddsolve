@@ -67,10 +67,11 @@
 	  (remove-card (hands owner) card))
    (play-to-trick st card)))
     
+;; if you have any cards in the suit led you have to play one
 (defn legal-follows [led cards]
-  (if-let [follow (filter #(= (:suit %) led) cards)]
-    follow  ; if you have any cards in the suit led you have to play one
-    cards)) ; otherwise play whatever 
+  (or
+   (filter #(= (:suit %) led) cards)
+   cards)) ; otherwise play whatever 
 
 (defn legal-plays [trick [{led :suit} :as cards]]
   (if (seq trick) ; if you're not leading you must try to follow suit
@@ -109,24 +110,16 @@
 		 (val %))
 	       suits)))
 
- (defn equiv-suit [{:keys [west north east south]} played]
- "Given a list of cards 2-14 that have been played already,
-  convert a suit's cards to their equivalence classes, where 1 is the master
-  card in the suit and any touching cards in the same player's hand (equals),
-  2 is the next-strongest group, etc., up to possibly 13."
- )
 (defn winner [trumps
 	       led
-	       {s1 :suit, rank1 :rank :as card1}
-	       {s2 :suit, rank2 :rank :as card2}]
-   (let [r1 (rank-to-int rank1)
-	 r2 (rank-to-int rank2)]
-     (cond
-      (= s1 s2) (if (> r1 r2) card1 card2)
-      (= s1 trumps) card1
-      (= s2 trumps) card2
-      (= s1 led) card1
-      :else card2)))
+	       {s1 :suit :as card1}
+	       {s2 :suit :as card2}]
+   (cond
+     (= s1 s2) (max-key (comp rank-to-int :rank) card1 card2)
+     (= s1 trumps) card1
+     (= s2 trumps) card2
+     (= s1 led) card1
+     :else card2))
 
 (defn possible-next-states [position]
    (map (partial play position) (legal-moves position)))
@@ -144,7 +137,7 @@
 
 (defmacro short-hand [owner & suits]
   (let [suit-labels [:spade :heart :diamond :club]
-	processed (for [s suits] (parse-suit s))]
+	processed (map parse-suit suits)]
     `(make-hand ~owner
 		(zipmap ~suit-labels
 			(vec '~processed)))))
@@ -170,7 +163,7 @@
 	      (instance? Card choice) choice
 	      (map? choice) (:card choice)
 	      (seq? choice) (first choice)
-	      :else (break))] ; can't make sense of this miss
+	      :else (break))] ; can't make sense of this mess
     (when (some #{card} legal-choices) ; only take legal moves
       (play posn card))))
 
