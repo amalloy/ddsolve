@@ -9,6 +9,10 @@
 		  to-play ; who plays next
 		  score])
 (defrecord Position [hands state])
+(defrecord Conseq [posn ; the resultant position
+		   card ; the card played to get here
+		   score ; the score resulting (if known)
+		   ])
 
 (defn ring [& elts]
    (zipmap elts (drop 1 (cycle elts))))
@@ -137,7 +141,7 @@
 
 (defmacro short-hand [owner & suits]
   (let [suit-labels [:spade :heart :diamond :club]
-	processed (map parse-suit suits)]
+	processed (for [s suits] (parse-suit s))]
     `(make-hand ~owner
 		(zipmap ~suit-labels
 			(vec '~processed)))))
@@ -185,11 +189,6 @@
 (def bad-c (Conseq. (play posn (Card. :spade :a :w)) nil nil))
 ;(def end-posn (play-deal-strategically posn lowest-strategy 44))
 ;(def empty-posn (play-deal-strategically end-posn highest-strategy 8))
-
-(defrecord Conseq [posn ; the resultant position
-		   card ; the card played to get here
-		   score ; the score resulting (if known)
-		   ])
 
 (defn best-for-player
   "Return a function which chooses, from among a set of positions, the one with the
