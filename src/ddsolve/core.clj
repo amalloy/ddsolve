@@ -13,6 +13,7 @@
 		   card ; the card played to get here
 		   score ; the score resulting (if known)
 		   ])
+(def empty-score (Score. 0 0))
 
 (defn ring [& elts]
    (zipmap elts (drop 1 (cycle elts))))
@@ -28,7 +29,7 @@
 	      {s1 :suit, r1 :rank :as card1}
 	      {s2 :suit, r2 :rank :as card2}]
   (cond
-   (= s1 s2) (if (> r1 r2) card1 card2)
+   (= s1 s2) (if (rank> r1 r2) card1 card2)
    (= s1 trumps) card1
    (= s2 trumps) card2
    (= s1 led) card1
@@ -41,6 +42,22 @@
   (let [winning-side (side winner)
 	tricks (winning-side score)]
     (update-in score [winning-side] inc)))
+
+(def score-of (comp :score :state))
+
+(defn reset-score [posn]
+  (assoc-in posn [:state :score] empty-score))
+
+(defn add-scores [{n1 :ns, e1 :ew :as s1}
+		  {n2 :ns, e2 :ew :as s2}]
+  (comment Probably a premature optimization
+	   (condp #(= empty-score %)
+	       s1 s2 
+	       s2 s1
+	       (Score. (+ n1 n2)
+		       (+ e1 e2))))
+  (Score. (+ n1 n2)
+	  (+ e1 e2)))
     
 (defn play-to-trick [{cards :trick,
 		      score :score,
@@ -177,7 +194,7 @@
        num-plays))
 
 ;; "default" positions to analyze, for use in testing
-(def st (State. :nt [] :w {:ew 0, :ns 0}))
+(def st (State. :nt [] :e {:ew 0, :ns 0}))
 
 ;; A simple W-vs-S endplay position, with whoever's on lead being endplayed
 (def layout {:w (short-hand :w aqt - - -)
@@ -209,21 +226,25 @@ best score for the player supplied"
   "determine the optimal play recursively"
   [consq]
   (let [posn (:posn consq)
-	p (-> posn (:state) (:to-play))]
+	p (-> posn (:state) (:to-play))
+	score (score-of posn)]
     (if-let [plays (seq (legal-moves posn))]
       (let [best-conseq (reduce (best-for-player p)
 				(map (comp minimax
-					   (partial conseq-of posn))
+					   (partial conseq-of (reset-score posn)))
 				     plays))]
 ;	(assoc best-conseq
 					;	  :posn nil))
-	best-conseq)
-      (assoc consq
-	:score (:score (:state posn))))))
+	(update-in best-conseq
+		   [:posn :state :score]
+		   add-scores score))
+      (assoc-in consq
+		[:posn :state :score]
+		(score-of posn)))))
+
 
 (defn simplify [all-cards hands]
   )
 
-
-
 (defn tricks-after [{hands :hands, st :state :as posn}])
+
