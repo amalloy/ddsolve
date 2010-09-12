@@ -23,6 +23,13 @@
 (def side {:e :ew, :w :ew
 	   :n :ns, :s :ns})
 
+(defn rank-to-int [rank]
+   (if (number? rank) rank
+       ({:t 10 :j 11 :q 12 :k 13 :a 14} rank)))
+
+(defn rank> [& ranks]
+   "Compares ranks of cards."
+   (apply > (map rank-to-int ranks)))
 
 (defn winner [trumps
 	      led
@@ -81,6 +88,9 @@
   (let [cards (hand suit)]
     (assoc hand suit (remove #{card} cards))))
 
+(defn get-cards [hand]
+  (apply concat (vals hand)))
+
 (defn play [{st :state, hands :hands}
 	    {owner :owner :as card}]
   (Position.
@@ -91,30 +101,18 @@
 ;; if you have any cards in the suit led you have to play one
 (defn legal-follows [led cards]
   (or
-   (filter #(= (:suit %) led) cards)
+   (seq (filter (comp #{led} :suit) cards))
    cards)) ; otherwise play whatever 
 
-(defn legal-plays [trick [{led :suit} :as cards]]
+(defn legal-plays [[{led :suit} :as trick] cards]
   (if (seq trick) ; if you're not leading you must try to follow suit
     (legal-follows led cards)
     cards)) ; otherwise play whatever
-
-(defn get-cards [hand]
-  (apply concat (vals hand)))
 
 (defn legal-moves [{{player :to-play
 		     trick :trick} :state
 		     hands :hands}]
   (legal-plays trick (get-cards (hands player))))
-
-(defn rank-to-int [rank]
-   (if (number? rank) rank
-       ({:t 10 :j 11 :q 12 :k 13 :a 14} rank)))
-
-(defn rank> [& ranks]
-   "Compares ranks of cards. Just treats them as numbers now, but using it
-    allows for future changes, eg using 'k instead of 13"
-   (apply > (map rank-to-int ranks)))
 
 (defn make-suit
   ([suit ranks] (make-suit [suit nil ranks]))
@@ -147,7 +145,7 @@
 
 (defmacro parse-suit [s]
   `(let [cards# (seq (str ~s))]
-     (if (= cards# [\-])
+     (if (= cards# [\-]) ; - signifies a void
        []
        (vec
 	(for [c# (map str cards#)]
@@ -158,7 +156,7 @@
 
 (defmacro short-hand [owner & suits]
   (let [suit-labels [:spade :heart :diamond :club]
-	processed (for [s suits] (parse-suit s))]
+	processed (for [s suits] (parse-suit s))] ; can't map over a macro
     `(make-hand ~owner
 		(zipmap ~suit-labels
 			(vec '~processed)))))
@@ -194,7 +192,7 @@
        num-plays))
 
 ;; "default" positions to analyze, for use in testing
-(def st (State. :nt [] :e {:ew 0, :ns 0}))
+(def st (State. :nt [] :w {:ew 0, :ns 0}))
 
 ;; A simple W-vs-S endplay position, with whoever's on lead being endplayed
 (def layout {:w (short-hand :w aqt - - -)
@@ -204,8 +202,6 @@
 (def posn (Position. layout st))
 (def c (Conseq. posn nil nil))
 (def bad-c (Conseq. (play posn (Card. :spade :a :w)) nil nil))
-;(def end-posn (play-deal-strategically posn lowest-strategy 44))
-;(def empty-posn (play-deal-strategically end-posn highest-strategy 8))
 
 (defn best-for-player
   "Return a function which chooses, from among a set of positions, the one with the
@@ -220,21 +216,19 @@ best score for the player supplied"
   (let [new-posn (play posn card)]
     (Conseq. new-posn
 	     card
-	     (:score (:state new-posn)))))
+	     (-> new-posn :state :score))))
 
 (defn minimax
   "determine the optimal play recursively"
   [consq]
   (let [posn (:posn consq)
-	p (-> posn (:state) (:to-play))
+	p (-> posn :state :to-play)
 	score (score-of posn)]
     (if-let [plays (seq (legal-moves posn))]
       (let [best-conseq (reduce (best-for-player p)
 				(map (comp minimax
 					   (partial conseq-of (reset-score posn)))
 				     plays))]
-;	(assoc best-conseq
-					;	  :posn nil))
 	(update-in best-conseq
 		   [:posn :state :score]
 		   add-scores score))
