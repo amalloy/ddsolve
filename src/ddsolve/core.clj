@@ -20,23 +20,26 @@
 
 (def next-player (ring :w :n :e :s))
 (def opponent (ring :ew :ns))
-(def side {:e :ew, :w :ew
+(def side {:e :ew, :w :ew,
 	   :n :ns, :s :ns})
+(def honor-rank {:t 10 :j 11 :q 12 :k 13 :a 14})
 
 (defn rank-to-int [rank]
    (if (number? rank) rank
-       ({:t 10 :j 11 :q 12 :k 13 :a 14} rank)))
+       (honor-rank rank)))
 
 (defn rank> [& ranks]
    "Compares ranks of cards."
    (apply > (map rank-to-int ranks)))
 
+(def card-rank (comp rank-to-int :rank))
+
 (defn winner [trumps
 	      led
-	      {s1 :suit, r1 :rank :as card1}
-	      {s2 :suit, r2 :rank :as card2}]
+	      {s1 :suit :as card1}
+	      {s2 :suit :as card2}]
   (cond
-   (= s1 s2) (if (rank> r1 r2) card1 card2)
+   (= s1 s2) (max-key card-rank card1 card2)
    (= s1 trumps) card1
    (= s2 trumps) card2
    (= s1 led) card1
@@ -128,17 +131,6 @@
 		 owner
 		 (val %))
 	       suits)))
-
-(defn winner [trumps
-	       led
-	       {s1 :suit :as card1}
-	       {s2 :suit :as card2}]
-   (cond
-     (= s1 s2) (max-key (comp rank-to-int :rank) card1 card2)
-     (= s1 trumps) card1
-     (= s2 trumps) card2
-     (= s1 led) card1
-     :else card2))
 
 (defn possible-next-states [position]
    (map (partial play position) (legal-moves position)))
