@@ -195,10 +195,10 @@
 (def st (State. :nt [] :w {:ew 0, :ns 0}))
 
 ;; A simple W-vs-S endplay position, with whoever's on lead being endplayed
-(def layout {:w (short-hand :w aqt - - -)
-	     :n (short-hand :n - akq - -)
-	     :e (short-hand :e - - akq -)
-	     :s (short-hand :s kj9 - - -)})
+(def layout {:w (short-hand :w aqt - - a)
+	     :n (short-hand :n - akq - 2)
+	     :e (short-hand :e - - akq 3)
+	     :s (short-hand :s kj9 - - 7)})
 (def posn (Position. layout st))
 (def c (Conseq. posn nil nil))
 (def bad-c (Conseq. (play posn (Card. :spade :a :w)) nil nil))
@@ -218,24 +218,23 @@ best score for the player supplied"
 	     card
 	     (-> new-posn :state :score))))
 
-(defn minimax
-  "determine the optimal play recursively"
-  [consq]
-  (let [posn (:posn consq)
-	p (-> posn :state :to-play)
-	score (score-of posn)]
-    (if-let [plays (seq (legal-moves posn))]
-      (let [best-conseq (reduce (best-for-player p)
-				(map (comp minimax
-					   (partial conseq-of (reset-score posn)))
-				     plays))]
-	(update-in best-conseq
-		   [:posn :state :score]
-		   add-scores score))
-      (assoc-in consq
-		[:posn :state :score]
-		(score-of posn)))))
-
+(def minimax (memoize
+  (fn [consq]
+    "determine the optimal play recursively"
+    (let [posn (:posn consq)
+	  p (-> posn :state :to-play)
+	  score (score-of posn)]
+      (if-let [plays (seq (legal-moves posn))]
+	(let [best-conseq (reduce (best-for-player p)
+				  (map (comp minimax
+					     (partial conseq-of (reset-score posn)))
+				       plays))]
+	  (update-in best-conseq
+		     [:posn :state :score]
+		     add-scores score))
+	(assoc-in consq
+		  [:posn :state :score]
+		  (score-of posn)))))))
 
 (defn simplify [all-cards hands]
   )
