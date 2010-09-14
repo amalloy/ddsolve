@@ -15,29 +15,49 @@
 		   ])
 (def empty-score (Score. 0 0))
 
-(defn ring [& elts]
-   (zipmap elts (drop 1 (cycle elts))))
+(defn ring
+  "Given a set of elements, returns a map such that element N maps to
+element N+1, and so on, with element N 'wrapping' to element 0"
+  [& elts]
+  (zipmap elts (drop 1 (cycle elts))))
 
+;; defines the clockwise order of plays
 (def next-player (ring :w :n :e :s))
-(def opponent (ring :ew :ns))
+
+;; Given a player, return his side designator
 (def side {:e :ew, :w :ew,
 	   :n :ns, :s :ns})
+
+;; The rank each honor has
 (def honor-rank {:t 10 :j 11 :q 12 :k 13 :a 14})
+
+(def suit-labels [:spade :heart :diamond :club])
 
 (defn rank-to-int [rank]
    (if (number? rank) rank
        (honor-rank rank)))
 
-(defn rank> [& ranks]
-   "Compares ranks of cards."
-   (apply > (map rank-to-int ranks)))
+(defn rank>
+  "Compares ranks of cards analogously to the > operator"
+  [& ranks]
+  (apply > (map rank-to-int ranks)))
 
+;; Get the numerical rank of a card
 (def card-rank (comp rank-to-int :rank))
 
-(defn winner [trumps
-	      led
-	      {s1 :suit :as card1}
-	      {s2 :suit :as card2}]
+(defn card>
+  "Compares ranks of cards analogously to the > operator"
+  [& cards]
+  (apply > (map card-rank cards)))
+
+(defn winner
+  "Given two cards, the suit led, and the trump suit, determines which of the
+two cards has more taking power (in context of the current trick)"
+  [trumps
+   led
+   {s1 :suit :as card1}
+   {s2 :suit :as card2}]
+;  (break)
   (cond
    (= s1 s2) (max-key card-rank card1 card2)
    (= s1 trumps) card1
@@ -45,8 +65,10 @@
    (= s1 led) card1
    :else card2))
 
-(defn trick-winner [trumps [{led :suit} :as cards]]
-   (reduce (partial winner trumps led) cards))
+(defn trick-winner
+  "Examimes a sequence of cards and determines which one wins the trick"
+  [trumps [{led :suit} :as cards]]
+  (reduce (partial winner trumps led) cards))
 
 (defn update-score [score winner]
   (let [winning-side (side winner)
@@ -58,8 +80,10 @@
 (defn reset-score [posn]
   (assoc-in posn [:state :score] empty-score))
 
-(defn add-scores [{n1 :ns, e1 :ew :as s1}
-		  {n2 :ns, e2 :ew :as s2}]
+(defn add-scores
+  "Adds together the NS and EW components of two Score objects"
+  [{n1 :ns, e1 :ew :as s1}
+   {n2 :ns, e2 :ew :as s2}]
   (comment Probably a premature optimization
 	   (condp #(= empty-score %)
 	       s1 s2 
@@ -74,22 +98,23 @@
 		      trumps :trumpsy
 		      :as s}
 		     {o :owner :as card}]
-  (if (= (count cards) 3) ; this is the fourth card
+  (if (= (count cards) 3)		    ; this is the fourth card
     (let [winning-card (trick-winner trumps ; find who won the trick
-				     (conj cards card)) ; add the fourth card
+				     (conj cards card)) ; add the fourth card XXX make sure conj is adding to the end here, not the front
 	  leader (:owner winning-card)]
       (State.
-	      trumps
-	      [] ; no cards played to the next trick yet
-	      (:owner winning-card)
-	      (update-score score leader)))
-    (assoc s ; not the fourth card - just add this card to the trick
+       trumps
+       []		       ; no cards played to the next trick yet
+       (:owner winning-card)
+       (update-score score leader)))
+    (assoc s   ; not the fourth card - just add this card to the trick
       :trick (conj cards card)
       :to-play (next-player o))))
 
-(defn remove-card [hand {suit :suit :as card}]
-  (let [cards (hand suit)]
-    (assoc hand suit (remove #{card} cards))))
+(defn remove-card
+  "Remove a specified card from its owner's hand."
+  [hand {suit :suit :as card}]
+  (update-in hand [suit] disj card))
 
 (defn get-cards [hand]
   (apply concat (vals hand)))
@@ -97,8 +122,8 @@
 (defn play [{st :state, hands :hands}
 	    {owner :owner :as card}]
   (Position.
-   (assoc hands owner
-	  (remove-card (hands owner) card))
+   (update-in hands [owner]
+	      remove-card card)
    (play-to-trick st card)))
     
 ;; if you have any cards in the suit led you have to play one
@@ -118,11 +143,12 @@
   (legal-plays trick (get-cards (hands player))))
 
 (defn make-suit
-  ([suit ranks] (make-suit [suit nil ranks]))
+  ([suit ranks] (make-suit suit nil ranks))
   ([suit owner ranks]
      (let [template (Card. suit nil owner)]
-       (map (partial assoc template :rank)
-	    (sort rank> ranks)))))
+       (reduce #(conj %1 (assoc template :rank %2))
+	       (sorted-set-by card>)
+	       ranks))))
 
 (defn make-hand [owner suits]
   (zipmap (map first suits)
@@ -147,11 +173,10 @@
 	     (keyword (.toLowerCase c#)))))))))
 
 (defmacro short-hand [owner & suits]
-  (let [suit-labels [:spade :heart :diamond :club]
-	processed (for [s suits] (parse-suit s))] ; can't map over a macro
+  (let [processed (for [s suits] (parse-suit s))] ; can't map over a macro
     `(make-hand ~owner
 		(zipmap ~suit-labels
-			(vec '~processed)))))
+			'~processed))))
 
 (defn ignore-params
   ([f n-keep]
@@ -213,7 +238,7 @@ best score for the player supplied"
 (def minimax (memoize
   (fn [consq]
     "determine the optimal play recursively"
-    (let [posn (:posn consq)
+    (let [posn (:posn consq) 
 	  p (-> posn :state :to-play)
 	  score (score-of posn)]
       (if-let [plays (seq (legal-moves posn))]
