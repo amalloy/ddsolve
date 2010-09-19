@@ -24,8 +24,9 @@
 	   :n :ns, :s :ns})
 
 (defn rank-to-int [rank]
-   (if (number? rank) rank
-       ({:t 10 :j 11 :q 12 :k 13 :a 14} rank)))
+  (if (number? rank)
+    rank
+    ({:t 10 :j 11 :q 12 :k 13 :a 14} rank)))
 
 (defn rank> [& ranks]
    "Compares ranks of cards."
@@ -68,25 +69,26 @@
     
 (defn play-to-trick [{cards :trick,
 		      score :score,
-		      trumps :trumpsy
+		      trumps :trumps
 		      :as s}
 		     {o :owner :as card}]
   (if (= (count cards) 3) ; this is the fourth card
-    (let [winning-card (trick-winner trumps ; find who won the trick
-				     (conj cards card)) ; add the fourth card
-	  leader (:owner winning-card)]
+    (let [{leader :owner} (trick-winner trumps ; find who won the trick
+					(conj cards card)) ; add the fourth card
+	  ]
       (State.
 	      trumps
 	      [] ; no cards played to the next trick yet
-	      (:owner winning-card)
+	      leader
 	      (update-score score leader)))
     (assoc s ; not the fourth card - just add this card to the trick
       :trick (conj cards card)
       :to-play (next-player o))))
 
+(remove )
+
 (defn remove-card [hand {suit :suit :as card}]
-  (let [cards (hand suit)]
-    (assoc hand suit (remove #{card} cards))))
+  (update-in hand [suit] #(remove #{card} %)))
 
 (defn get-cards [hand]
   (apply concat (vals hand)))
