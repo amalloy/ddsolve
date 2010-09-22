@@ -57,7 +57,6 @@ two cards has more taking power (in context of the current trick)"
    led
    {s1 :suit :as card1}
    {s2 :suit :as card2}]
-;  (break)
   (cond
    (= s1 s2) (max-key card-rank card1 card2)
    (= s1 trumps) card1
@@ -100,7 +99,7 @@ two cards has more taking power (in context of the current trick)"
 		     {o :owner :as card}]
   (if (= (count cards) 3)		    ; this is the fourth card
     (let [winning-card (trick-winner trumps ; find who won the trick
-				     (conj cards card)) ; add the fourth card XXX make sure conj is adding to the end here, not the front
+				     (conj cards card)) ; add the fourth card
 	  leader (:owner winning-card)]
       (State.
        trumps
