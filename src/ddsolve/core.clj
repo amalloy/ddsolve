@@ -3,6 +3,9 @@
   (:refer clojure.pprint :only [pprint]))
 
 (defrecord Card [suit rank owner])
+(defn make-card [{:keys [suit rank owner]}]
+  (Card. suit rank owner))
+
 (defrecord Score [ns ew])
 (defrecord State [trumps
 		  trick ; cards already played to the current trick
@@ -27,11 +30,6 @@ element N+1, and so on, with element N 'wrapping' to element 0"
 ;; Given a player, return his side designator
 (def side {:e :ew, :w :ew,
 	   :n :ns, :s :ns})
-
-(defn rank-to-int [rank]
-  (if (number? rank)
-    rank
-    ({:t 10 :j 11 :q 12 :k 13 :a 14} rank)))
 
 ;; The rank each honor has
 (def honor-rank {:t 10 :j 11 :q 12 :k 13 :a 14})
@@ -75,9 +73,7 @@ two cards has more taking power (in context of the current trick)"
   (reduce (partial winner trumps led) cards))
 
 (defn update-score [score winner]
-  (let [winning-side (side winner)
-	tricks (winning-side score)]
-    (update-in score [winning-side] inc)))
+  (update-in score [(side winner)] inc))
 
 (def score-of (comp :score :state))
 
@@ -137,22 +133,22 @@ two cards has more taking power (in context of the current trick)"
 		     hands :hands}]
   (legal-plays trick (get-cards (hands player))))
 
-;; XXX use into?
 (defn make-suit
   ([suit ranks] (make-suit suit nil ranks))
   ([suit owner ranks]
      (let [template (Card. suit nil owner)]
-       (reduce #(conj %1 (assoc template :rank %2))
-	       (sorted-set-by card>)
-	       ranks))))
+       (into (sorted-set-by card>)
+	     (map (partial assoc template :rank)
+		  ranks)))))
 
 (defn make-hand [owner suits]
-  (zipmap (keys suits)
+  (zipmap suit-labels
 	  (map #(make-suit
-		 (key %)
-		 owner
-		 (val %))
-	       suits)))
+		  %2
+		  owner
+		  %1)
+	       suits
+	       suit-labels)))
 
 (defn possible-next-states [position]
   (map (partial play position) (legal-moves position)))
@@ -171,8 +167,7 @@ two cards has more taking power (in context of the current trick)"
 (defmacro short-hand [owner & suits]
   (let [processed (for [s suits] (parse-suit s))] ; can't map over a macro
     `(make-hand ~owner
-		(zipmap ~suit-labels
-			'~processed))))
+		'~processed)))
 
 (defn ignore-params
   ([f n-keep]
@@ -249,8 +244,8 @@ best score for the player supplied"
 		  [:posn :state :score]
 		  (score-of posn)))))))
 
-(defn simplify [all-cards hands]
-  )
-
-(defn tricks-after [{hands :hands, st :state :as posn}])
-
+(defn simplify [hands suit]
+  (->> hands (mapcat (comp suit val))
+             (into (sorted-set-by (complement card>)))
+	     (partition-by :owner)
+	     (zipmap (range))))
