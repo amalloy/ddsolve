@@ -1,5 +1,4 @@
 (ns ddsolve.core
-  (:use (swank core))
   (:refer clojure.pprint :only [pprint]))
 
 (defrecord Card [suit rank owner])
@@ -7,10 +6,12 @@
   (Card. suit rank owner))
 
 (defrecord Score [ns ew])
+
 (defrecord State [trumps
-		  trick ; cards already played to the current trick
-		  to-play ; who plays next
-		  score])
+				  trick	   ; cards already played to the current trick
+				  to-play  ; who plays next
+				  score])
+
 (defrecord Position [hands state])
 (defrecord Conseq [posn ; the resultant position
 		   card ; the card played to get here
@@ -245,7 +246,9 @@ best score for the player supplied"
 		  (score-of posn)))))))
 
 (defn simplify [hands suit]
-  (->> hands (mapcat (comp suit val))
-             (into (sorted-set-by (complement card>)))
-	     (partition-by :owner)
-	     (zipmap (range))))
+  (->> hands
+       (mapcat (comp suit val))
+       (into (sorted-set-by (complement card>)))
+       (partition-by :owner)
+       (zipmap (range))))
+
