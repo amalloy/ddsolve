@@ -2,3 +2,6 @@
 /classes/
 *~
 .cake
+ddsolve-1.0.0-SNAPSHOT.jar
+pom.xml
+resources
