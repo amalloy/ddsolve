@@ -235,7 +235,7 @@ two cards has more taking power (in context of the current trick)"
              :n (short-hand :n - akq - 2)
              :e (short-hand :e - - akq 3)
              :s (short-hand :s kj9 - - 7)})
-(def posn (Position. layout st))
+(def posn (simplify (Position. layout st)))
 (def c (Conseq. posn nil nil))
 ;;(def bad-c (Conseq. (play posn (Card. :spade :a :w)) nil nil))
 
