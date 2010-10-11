@@ -147,7 +147,7 @@ two cards has more taking power (in context of the current trick)"
 (defn play
   {:arglists '([posn card])}
   [{st :state, hands :hands}
-   {owner :owner :as card}]
+   {owner :owner, suit :suit, rank :rank :as card}]
   (Position.
    (update-in hands [owner suit rank :count]
               dec)
