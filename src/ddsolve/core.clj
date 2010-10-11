@@ -59,30 +59,42 @@ element N+1, and so on, with element N 'wrapping' to element 0"
   [& cards]
   (apply > (map card-rank cards)))
 
-;; seriously needs some refactoring - works but is AWFUL and possibly slow
+(defn assign-ranks-to [families player suit]
+  (let [included (filter #(and (= (:owner %) player)
+                               (= (:suit %) suit))
+                         families)]
+    {suit (zipmap (map :rank included)
+                  included)}))
+
+(defn build-suits-for-player [families player]
+  {player (into {}
+           (for [suit suit-labels]
+             (assign-ranks-to families player suit)))})
+
+(comment
+  TODO finish the job of making it work on {rank => family} as well as [& cards].
+  Speed it up - it's silly to throw away the suit information when computing
+  families, and then painstakingly cobble it back together.)
+         
 (defn simplify
-  ([posn]
+  "Scans over a position, containing either Cards or CardFamilies, and
+collects each group of 'touching' cards into a new Family"
+  ([posn]               ; simplify each suit and glue em back together
      (let [families (apply concat (for [suit suit-labels]
                                     (simplify (:hands posn) suit)))]
        (assoc posn :hands
               (into {} (for [p players]
-                         {p (into {}
-                                  (for [s suit-labels]
-                                    (let [candidates (filter #(and (= (:owner %) p)
-                                                                   (= (:suit %) s))
-                                                             families)]
-                                      {s (zipmap (map :rank candidates)
-                                                 candidates)})))}))))) ; still debugging this
+                         (build-suits-for-player families p))))))
   ([hands suit]
      (->> hands
           (mapcat (comp suit val)) ; get all of everyone's cards in the suit
           (into (sorted-set-by (complement card>))) ; sorted by rank ascending
           (partition-by :owner) ; find touching cards with the same owner
-          (zipmap (range))      ; assign each group an integer
-          (map (fn [[k v]] (CardFamily. suit
-                                        k
-                                        (:owner (first v))
-                                        (count v)))))))
+          (map (fn [rank cards] (CardFamily. suit
+                                             rank
+                                             (:owner (first cards))
+                                             (reduce + (map #(get % :count 1) cards))))
+               (range))))) ; it's easy for me to forget this turns into (map (fn) (range) STUFF)
 
 (defn winner
   "Given two cards, the suit led, and the trump suit, determines which of the
@@ -144,6 +156,7 @@ two cards has more taking power (in context of the current trick)"
   (filter #(not= 0 (:count %))
           (mapcat vals (vals hand))))
 
+;; TODO use (simplify) after every trick? track which suits need simplifying?
 (defn play
   {:arglists '([posn card])}
   [{st :state, hands :hands}
