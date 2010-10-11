@@ -87,6 +87,7 @@ element N+1, and so on, with element N 'wrapping' to element 0"
 (defn winner
   "Given two cards, the suit led, and the trump suit, determines which of the
 two cards has more taking power (in context of the current trick)"
+  {:arglists '([trumps led card1 card2])}
   [trumps
    led
    {s1 :suit :as card1}
@@ -100,6 +101,7 @@ two cards has more taking power (in context of the current trick)"
 
 (defn trick-winner
   "Examimes a sequence of cards and determines which one wins the trick"
+  {:arglists '([trumps cards])}
   [trumps [{led :suit} :as cards]]
   (reduce (partial winner trumps led) cards))
 
@@ -113,16 +115,19 @@ two cards has more taking power (in context of the current trick)"
 
 (defn add-scores
   "Adds together the NS and EW components of two Score objects"
+  {:arglists '([score1 score2])}
   [{n1 :ns, e1 :ew :as s1}
    {n2 :ns, e2 :ew :as s2}]
   (Score. (+ n1 n2)
           (+ e1 e2)))
-
-(defn play-to-trick [{cards :trick,
-                      score :score,
-                      trumps :trumps
-                      :as s}
-                     {o :owner :as card}]
+    
+(defn play-to-trick
+  {:arglists '([state card])}
+  [{cards :trick,
+    score :score,
+    trumps :trumps
+    :as s}
+   {o :owner :as card}]
   (if (= (count cards) 3)               ; this is the fourth card
     (let [{leader :owner} (trick-winner trumps ; find who won the trick
                                         (conj cards card))] ; add the fourth card
@@ -139,8 +144,10 @@ two cards has more taking power (in context of the current trick)"
   (filter #(not= 0 (:count %))
           (mapcat vals (vals hand))))
 
-(defn play [{st :state, hands :hands}
-            {owner :owner, suit :suit, rank :rank :as card}]
+(defn play
+  {:arglists '([posn card])}
+  [{st :state, hands :hands}
+   {owner :owner :as card}]
   (Position.
    (update-in hands [owner suit rank :count]
               dec)
@@ -152,14 +159,20 @@ two cards has more taking power (in context of the current trick)"
    (seq (filter (comp #{led} :suit) cards))
    cards)) ; otherwise play whatever 
 
-(defn legal-plays [[{led :suit} :as trick] cards]
+(defn legal-plays
+  "Given the cards already played to a trick, determine which of a set of
+cards is legal to play"
+  {:arglists '([trick cards])}
+  [[{led :suit} :as trick] cards]
   (if (seq trick) ; if you're not leading you must try to follow suit
     (legal-follows led cards)
     cards)) ; otherwise play whatever
 
-(defn legal-moves [{{player :to-play
-                     trick :trick} :state
-                     hands :hands}]
+(defn legal-moves
+  {:arglists '([posn])}
+  [{{player :to-play
+     trick :trick} :state
+     hands :hands}]
   (legal-plays trick (get-cards (hands player))))
 
 (defn make-suit
@@ -212,13 +225,13 @@ two cards has more taking power (in context of the current trick)"
 (defn contract [trumps declarer]
   (State. trumps [] (next-player declarer) (Score. 0 0)))
 
-(defn play-with-strategy [posn strat]
+(defn play-with-strategy [posn strat] ;; XXX this probably doesn't work anymore
   (let [legal-choices (legal-moves posn)
-        choice (strat legal-choices posn)
-        card (cond
-              (instance? Card choice) choice
-              (map? choice) (:card choice)
-              (seq? choice) (first choice))] ; can't make sense of this mess
+	choice (strat legal-choices posn)
+	card (cond
+	      (instance? Card choice) choice
+	      (map? choice) (:card choice)
+	      (seq? choice) (first choice))]
     (when (some #{card} legal-choices) ; only take legal moves
       (play posn card))))
 
