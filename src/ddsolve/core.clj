@@ -137,12 +137,12 @@ two cards has more taking power (in context of the current trick)"
 
 (defn get-cards [hand]
   (filter #(not= 0 (:count %))
-          (apply concat (vals hand))))
+          (mapcat vals (vals hand))))
 
 (defn play [{st :state, hands :hands}
             {owner :owner, suit :suit, rank :rank :as card}]
   (Position.
-   (update-in hands [owner suit rank]
+   (update-in hands [owner suit rank :count]
               dec)
    (play-to-trick st card)))
 
@@ -254,9 +254,11 @@ best score for the player supplied"
              card
              (-> new-posn :state :score))))
 
+(def iters (atom 0))
 (def minimax (memoize
               (fn [consq]
                 "determine the optimal play recursively"
+                (swap! iters inc)
                 (let [posn (:posn consq)
                       p (-> posn :state :to-play)
                       score (score-of posn)]
