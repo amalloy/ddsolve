@@ -43,8 +43,7 @@ element N+1, and so on, with element N 'wrapping' to element 0"
 (def suit-labels [:spade :heart :diamond :club])
 
 (defn rank-to-int [rank]
-  (if (number? rank) rank
-      (honor-rank rank)))
+  (get honor-rank rank rank))
 
 (defn rank>
   "Compares ranks of cards analogously to the > operator"
@@ -185,7 +184,7 @@ cards is legal to play"
   {:arglists '([posn])}
   [{{player :to-play
      trick :trick} :state
-     hands :hands}]
+     hands :hands :as posn}]
   (legal-plays trick (get-cards (hands player))))
 
 (defn make-suit
@@ -206,7 +205,7 @@ cards is legal to play"
                suit-labels)))
 
 (defn possible-next-states [position]
-  (map (partial play position) (legal-moves position)))
+  (map #(play position %) (legal-moves position)))
 
 (defmacro parse-suit [s]
   `(let [cards# (seq (str ~s))]
@@ -281,23 +280,34 @@ best score for the player supplied"
              (-> new-posn :state :score))))
 
 (def iters (atom 0))
-(def minimax (memoize
-              (fn [consq]
-                "determine the optimal play recursively"
-                (swap! iters inc)
-                (let [posn (:posn consq)
-                      p (-> posn :state :to-play)
-                      score (score-of posn)]
-                  (if-let [plays (seq (legal-moves posn))]
-                    (let [best-conseq (reduce (best-for-player p)
-                                              (map (comp minimax
-                                                         (partial conseq-of (reset-score posn)))
-                                                   plays))]
-                      (update-in best-conseq
-                                 [:posn :state :score]
-                                 add-scores score))
-                    (assoc-in consq
-                              [:posn :state :score]
-                              (score-of posn)))))))
+
+;; TODO refactor this
+(let [memoize identity]
+ (def minimax (memoize
+               (fn
+                 ([consq]
+                    (minimax 1 consq))
+                 ([pmap-depth consq]
+                    (swap! iters inc)
+                    (let [posn (:posn consq)
+                          p (-> posn :state :to-play)
+                          score (score-of posn)
+                          mapfn (if (pos? pmap-depth)
+                                  pmap
+                                  map)
+                          pmap-depth (dec pmap-depth)]
+                      (if-let [plays (seq (legal-moves posn))]
+                        (let [best-conseq
+                              (reduce (best-for-player p)
+                                      (mapfn (comp #(minimax pmap-depth %)
+                                                   #(conseq-of (reset-score posn) %))
+                                             plays))]
+                          (update-in best-conseq
+                                     [:posn :state :score]
+                                     add-scores score))
+                        (assoc-in consq
+                                  [:posn :state :score]
+                                  (score-of posn)))))))
+      ))
 
 
