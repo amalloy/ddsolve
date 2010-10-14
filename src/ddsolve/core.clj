@@ -281,33 +281,35 @@ best score for the player supplied"
 
 (def iters (atom 0))
 
+;; argh damn it, the pmap option is preventing the memoization of minimax
+;; if pmap-depth is 1, this will be a small issue, but it will definitely
+;; help to get it fixed.
 ;; TODO refactor this
-(let [memoize identity]
- (def minimax (memoize
-               (fn
-                 ([consq]
-                    (minimax 1 consq))
-                 ([pmap-depth consq]
-                    (swap! iters inc)
-                    (let [posn (:posn consq)
-                          p (-> posn :state :to-play)
-                          score (score-of posn)
-                          mapfn (if (pos? pmap-depth)
-                                  pmap
-                                  map)
-                          pmap-depth (dec pmap-depth)]
-                      (if-let [plays (seq (legal-moves posn))]
-                        (let [best-conseq
-                              (reduce (best-for-player p)
-                                      (mapfn (comp #(minimax pmap-depth %)
-                                                   #(conseq-of (reset-score posn) %))
-                                             plays))]
-                          (update-in best-conseq
-                                     [:posn :state :score]
-                                     add-scores score))
-                        (assoc-in consq
-                                  [:posn :state :score]
-                                  (score-of posn)))))))
-      ))
+(def minimax (memoize
+              (fn
+                ([consq]
+                   (minimax 1 consq))
+                ([pmap-depth consq]
+                   (swap! iters inc)
+                   (let [posn (:posn consq)
+                         p (-> posn :state :to-play)
+                         score (score-of posn)
+                         mapfn (if (pos? pmap-depth)
+                                 pmap
+                                 map)
+                         pmap-depth (dec pmap-depth)]
+                     (if-let [plays (seq (legal-moves posn))]
+                       (let [best-conseq
+                             (reduce (best-for-player p)
+                                     (mapfn (comp #(minimax pmap-depth %)
+                                                  #(conseq-of (reset-score posn) %))
+                                            plays))]
+                         (update-in best-conseq
+                                    [:posn :state :score]
+                                    add-scores score))
+                       (assoc-in consq
+                                 [:posn :state :score]
+                                 (score-of posn)))))))
+     )
 
 
