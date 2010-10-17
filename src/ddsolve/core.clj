@@ -6,13 +6,16 @@
   (Card. suit rank owner))
 
 (defrecord CardFamily [suit rank owner count]) ;; for sets of equivalent cards
+(defn count-cards [card-or-family]
+  (get card-or-family :count 1))
 
 (defrecord Score [ns ew])
 
 (defrecord State [trumps
 				  trick	   ; cards already played to the current trick
 				  to-play  ; who plays next
-				  score])
+				  score
+                  to-simplify]) ; which suits need re-simplification
 
 (defrecord Position [hands state])
 (defrecord Conseq [posn ; the resultant position
@@ -21,6 +24,11 @@
                    ])
 (def empty-score (Score. 0 0))
 
+(defn maybe-vals [m]
+  (if (map? m)
+    (vals m)
+    m))
+
 (defn ring
   "Given a set of elements, returns a map such that element N maps to
 element N+1, and so on, with element N 'wrapping' to element 0"
@@ -28,13 +36,15 @@ element N+1, and so on, with element N 'wrapping' to element 0"
   (zipmap elts (drop 1 (cycle elts))))
 
 ;; defines the clockwise order of plays
-(def next-player (ring :w :n :e :s))
+(def ^{:arglists '([player])}
+     next-player (ring :w :n :e :s))
 
 ;; if you just need a list of players in any old order
 (def players (keys next-player))
 
 ;; Given a player, return his side designator
-(def side {:e :ew, :w :ew,
+(def ^{:arglists '([player])}
+     side {:e :ew, :w :ew,
            :n :ns, :s :ns})
 
 ;; The rank each honor has
@@ -66,34 +76,44 @@ element N+1, and so on, with element N 'wrapping' to element 0"
                   included)}))
 
 (defn build-suits-for-player [families player]
-  {player (into {}
-           (for [suit suit-labels]
-             (assign-ranks-to families player suit)))})
+  (into {}
+        (for [suit suit-labels]
+          (assign-ranks-to families player suit))))
 
 (comment
   TODO finish the job of making it work on {rank => family} as well as [& cards].
+
   Speed it up - it's silly to throw away the suit information when computing
   families, and then painstakingly cobble it back together.)
-         
+
 (defn simplify
   "Scans over a position, containing either Cards or CardFamilies, and
 collects each group of 'touching' cards into a new Family"
   ([posn]               ; simplify each suit and glue em back together
-     (let [families (apply concat (for [suit suit-labels]
-                                    (simplify (:hands posn) suit)))]
-       (assoc posn :hands
-              (into {} (for [p players]
-                         (build-suits-for-player families p))))))
+     (let [to-update (:to-simplify (:state posn))
+           [keep-suits update-suits] ((juxt remove filter) to-update
+                                      suit-labels) ; XXX indents wrong?
+           families (mapcat #(simplify (:hands posn) %)
+                            update-suits)]
+       (assoc-in
+        (assoc posn :hands
+               (into {} (for [p players]
+                          {p (into (build-suits-for-player families p)
+                                   (zipmap keep-suits
+                                           (map #((comp % p :hands) posn)
+                                                keep-suits)))})))
+        [:state :to-simplify] #{})))
   ([hands suit]
      (->> hands
-          (mapcat (comp suit val)) ; get all of everyone's cards in the suit
+          (mapcat (comp maybe-vals suit val)) ; get everyone's cards in the suit
+          (filter (comp pos? count-cards))    ; drop empty families
           (into (sorted-set-by (complement card>))) ; sorted by rank ascending
           (partition-by :owner) ; find touching cards with the same owner
           (map (fn [rank cards] (CardFamily. suit
                                              rank
                                              (:owner (first cards))
-                                             (reduce + (map #(get % :count 1) cards))))
-               (range))))) ; it's easy for me to forget this turns into (map (fn) (range) STUFF)
+                                             (reduce + (map count-cards cards))))
+               (range))))) ; i often forget this turns into (map (fn) (range) STUFF)
 
 (defn winner
   "Given two cards, the suit led, and the trump suit, determines which of the
@@ -112,14 +132,14 @@ two cards has more taking power (in context of the current trick)"
 
 (defn trick-winner
   "Examimes a sequence of cards and determines which one wins the trick"
-  {:arglists '([trumps cards])}
+  {:arglists '([trumps [& cards]])}
   [trumps [{led :suit} :as cards]]
   (reduce (partial winner trumps led) cards))
 
 (defn update-score [score winner]
   (update-in score [(side winner)] inc))
 
-(def score-of (comp :score :state))
+(def ^{:arglists '([posn])} score-of (comp :score :state))
 
 (defn reset-score [posn]
   (assoc-in posn [:state :score] empty-score))
@@ -140,13 +160,14 @@ two cards has more taking power (in context of the current trick)"
     :as s}
    {o :owner :as card}]
   (if (= (count cards) 3)               ; this is the fourth card
-    (let [{leader :owner} (trick-winner trumps ; find who won the trick
-                                        (conj cards card))] ; add the fourth card
+    (let [trick (conj cards card) ; add the fourth card
+          {leader :owner} (trick-winner trumps trick)] ; find who won the trick
       (State.
        trumps
        []                      ; no cards played to the next trick yet
        leader
-       (update-score score leader)))
+       (update-score score leader)
+       (set (map :suit (filter (comp #(= 1 %) :count) trick)))))
     (assoc s   ; not the fourth card - just add this card to the trick
       :trick (conj cards card)
       :to-play (next-player o))))
@@ -207,21 +228,21 @@ cards is legal to play"
 (defn possible-next-states [position]
   (map #(play position %) (legal-moves position)))
 
-(defmacro parse-suit [s]
-  `(let [cards# (seq (str ~s))]
-     (if (= cards# [\-]) ; - signifies a void
-       []
-       (vec
-        (for [c# (map str cards#)]
-          (try
-            (Integer/parseInt c#)
-            (catch Exception _#
-              (keyword (.toLowerCase c#)))))))))
+(defn parse-suit [s]
+  (let [cards (seq (str s))]
+    (if (= cards [\-])                  ; - signifies a void
+      []
+      (vec
+       (for [c (map str cards)]
+         (try
+           (Integer/parseInt c)
+           (catch Exception _
+             (keyword (.toLowerCase c)))))))))
 
+;; this is only a macro so that suits don't have to be quoted
 (defmacro short-hand [owner & suits]
-  (let [processed (for [s suits] (parse-suit s))] ; can't map over a macro
-    `(make-hand ~owner
-                '~processed)))
+  `(make-hand ~owner
+              '~(map parse-suit suits)))
 
 (defn ignore-params
   ([f n-keep]
@@ -235,7 +256,7 @@ cards is legal to play"
 (def lowest-strategy (ignore-params last 1))
 
 (defn contract [trumps declarer]
-  (State. trumps [] (next-player declarer) (Score. 0 0)))
+  (State. trumps [] (next-player declarer) (Score. 0 0) (set suit-labels)))
 
 (defn play-with-strategy [posn strat] ;; XXX this probably doesn't work anymore
   (let [legal-choices (legal-moves posn)
@@ -253,9 +274,9 @@ cards is legal to play"
        num-plays))
 
 ;; "default" positions to analyze, for use in testing
-(def st (State. :nt [] :w {:ew 0, :ns 0}))
+(def st (contract :nt :s))
 
-;; A simple W-vs-S endplay position, with whoever's on lead being endplayed
+;; West needs to cash CA and exit with a spade
 (def layout {:w (short-hand :w aqt - - a)
              :n (short-hand :n - akq - 2)
              :e (short-hand :e - - akq 3)
@@ -281,35 +302,33 @@ best score for the player supplied"
 
 (def iters (atom 0))
 
-;; argh damn it, the pmap option is preventing the memoization of minimax
-;; if pmap-depth is 1, this will be a small issue, but it will definitely
-;; help to get it fixed.
 ;; TODO refactor this
-(def minimax (memoize
-              (fn
-                ([consq]
-                   (minimax 1 consq))
-                ([pmap-depth consq]
-                   (swap! iters inc)
-                   (let [posn (:posn consq)
-                         p (-> posn :state :to-play)
-                         score (score-of posn)
-                         mapfn (if (pos? pmap-depth)
-                                 pmap
-                                 map)
-                         pmap-depth (dec pmap-depth)]
-                     (if-let [plays (seq (legal-moves posn))]
-                       (let [best-conseq
-                             (reduce (best-for-player p)
-                                     (mapfn (comp #(minimax pmap-depth %)
-                                                  #(conseq-of (reset-score posn) %))
-                                            plays))]
-                         (update-in best-conseq
-                                    [:posn :state :score]
-                                    add-scores score))
-                       (assoc-in consq
-                                 [:posn :state :score]
-                                 (score-of posn)))))))
-     )
+(def ^{:arglists '([consq] [pmap-depth consq])}
+      minimax
+      (memoize
+       (fn
+         ([consq]
+            (minimax 1 consq))
+         ([pmap-depth consq]
+            (swap! iters inc)
+            (let [posn (:posn consq)
+                  p (-> posn :state :to-play)
+                  score (score-of posn)
+                  mapfn (if (pos? pmap-depth)
+                          pmap
+                          map)
+                  pmap-depth (dec pmap-depth)]
+              (if-let [plays (seq (legal-moves posn))]
+                (update-in (reduce (best-for-player p)
+                                   (mapfn (comp #(minimax pmap-depth %)
+                                                #(update-in % [:posn] simplify)
+                                                #(conseq-of (reset-score posn) %))
+                                          plays))
+                           [:posn :state :score]
+                           add-scores score)
+                (assoc-in consq
+                          [:posn :state :score]
+                          (score-of posn)))))))
+      )
 
 
