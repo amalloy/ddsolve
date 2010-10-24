@@ -2,6 +2,32 @@
   (:use (ddsolve state mechanics simplify))
   (:import (ddsolve.state Conseq)))
 
+(defn ignore-params
+  ([f n-keep]
+     (ignore-params f n-keep 0))
+  ([f n-keep n-drop]
+     (fn [& args]
+       (apply f (->> args (drop n-drop) (take n-keep))))))
+
+(def random-strategy (ignore-params rand-nth 1))
+(def highest-strategy (ignore-params first 1))
+(def lowest-strategy (ignore-params last 1))
+
+(defn play-with-strategy [posn strat] ;; XXX this probably doesn't work anymore
+  (let [legal-choices (legal-moves posn)
+        choice (strat legal-choices posn)
+        card (cond
+              (instance? Card choice) choice
+              (map? choice) (:card choice)
+              (seq? choice) (first choice))]
+    (when (some #{card} legal-choices)  ; only take legal moves
+      (play posn card))))
+
+(defn play-deal-strategically [deal strategy num-plays]
+  (nth (iterate #(play-with-strategy % strategy)
+                deal)
+       num-plays))
+
 (defn best-score-for-player
   "Return a function which chooses, from among a set of positions, the one with the
 best score for the player supplied"
