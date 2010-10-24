@@ -17,7 +17,7 @@
   (let [legal-choices (legal-moves posn)
         choice (strat legal-choices posn)
         card (cond
-              (instance? Card choice) choice
+              (:rank choice) choice
               (map? choice) (:card choice)
               (seq? choice) (first choice))]
     (when (some #{card} legal-choices)  ; only take legal moves
