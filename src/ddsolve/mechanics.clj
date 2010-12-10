@@ -64,7 +64,7 @@ two cards has more taking power (in context of the current trick)"
        []                      ; no cards played to the next trick yet
        leader
        (update-score score leader)
-       (set (map :suit (filter (comp #(= 1 %) :count) trick)))))
+       (set (map :suit (filter (comp #(<= 1 %) :count) trick)))))
     (assoc s   ; not the fourth card - just add this card to the trick
       :trick (conj cards card)
       :to-play (next-player o))))

@@ -21,10 +21,8 @@
           (assign-ranks-to families player suit))))
 
 (comment
-  TODO finish the job of making it work on {rank => family} as well as [& cards].
-
-  Speed it up - it's silly to throw away the suit information when computing
-  families, and then painstakingly cobble it back together.)
+  TODO Speed it up - it's silly to throw away the suit information when computing families, and then painstakingly cobble it back together.
+  Probably needs refactoring again, too.)
 
 (defn simplify
   "Scans over a position, containing either Cards or CardFamilies, and

@@ -13,7 +13,7 @@
 (def highest-strategy (ignore-params first 1))
 (def lowest-strategy (ignore-params last 1))
 
-(defn play-with-strategy [posn strat] ;; XXX this probably doesn't work anymore
+(defn play-with-strategy [posn strat]
   (let [legal-choices (legal-moves posn)
         choice (strat legal-choices posn)
         card (cond
@@ -21,7 +21,7 @@
               (map? choice) (:card choice)
               (seq? choice) (first choice))]
     (when (some #{card} legal-choices)  ; only take legal moves
-      (play posn card))))
+      (simplify (play posn card)))))
 
 (defn play-deal-strategically [deal strategy num-plays]
   (nth (iterate #(play-with-strategy % strategy)
@@ -54,27 +54,29 @@ best score for the player supplied"
 
 ;; TODO refactor this
 (declare minimax)
-(defn minimax-raw
-  ([posn]
-     (minimax 1 posn))
-  ([pmap-depth posn]
-     (swap! iters inc)
-     (let [state (:state posn)
-           {p :to-play, score :score} state
-           mapfn (if (pos? pmap-depth)
-                   pmap
-                   map)
-           pmap-depth (dec pmap-depth)]
-       (if-let [plays (seq (legal-moves posn))]
-         (add-scores
-          (reduce (best-score-for-player p)
-                  (mapfn (comp #(minimax pmap-depth %)
-                               simplify
-                               #(play (reset-score posn) %))
-                         plays))
-          score)
-         score))))
+(let [simplify simplify
+      memoize memoize]
+  (defn minimax-raw
+    ([posn]
+       (minimax 1 posn))
+    ([pmap-depth posn]
+       (swap! iters inc)
+       (let [state (:state posn)
+             {p :to-play, score :score} state
+             mapfn (if (pos? pmap-depth)
+                     pmap
+                     map)
+             pmap-depth (dec pmap-depth)]
+         (if-let [plays (seq (legal-moves posn))]
+           (add-scores
+            score
+            (reduce (best-score-for-player p)
+                    (mapfn (comp #(minimax pmap-depth %)
+                                 simplify
+                                 #(play (reset-score posn) %))
+                           plays)))
+           score))))
 
-(def ^{:arglists '([posn] [pmap-depth posn])}
-     minimax
-     (memoize minimax-raw))
+  (def ^{:arglists '([posn] [pmap-depth posn])}
+       minimax
+       (memoize minimax-raw)))
